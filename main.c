@@ -41,6 +41,7 @@ typedef struct {
 /*============================================================================*/
 
 void generate_mines(cell_t board[GRID_HEIGHT][GRID_WIDTH]);
+void draw_cells(SDL_Renderer* render, grid_t* grid, cell_t player);
 
 /*============================================================================*/
 
@@ -184,31 +185,9 @@ main(int argc, char* argv[]) {
                                    grid.colours.ghost.a);
             SDL_RenderFillRect(render, &ghost.pos);
         }
-
-        for (int i=0; i<GRID_HEIGHT; i++) {
-            for (int j=0; j<GRID_WIDTH; j++) {
-
-                if (player.pos.x == grid.board[i][j].pos.x &&
-                        player.pos.y == grid.board[i][j].pos.y) {
-                    grid.board[i][j].clicked = SDL_TRUE;
-                }
-
-                if (grid.board[i][j].clicked == SDL_TRUE) {
-                    if (grid.board[i][j].ismine) {
-                        SDL_SetRenderDrawColor(render, grid.colours.mine.r,
-                                   grid.colours.mine.g,
-                                   grid.colours.mine.b,
-                                   grid.colours.mine.a);
-                    } else {
-                        SDL_SetRenderDrawColor(render, grid.colours.clicked.r,
-                                   grid.colours.clicked.g,
-                                   grid.colours.clicked.b,
-                                   grid.colours.clicked.a);
-                    }
-                    SDL_RenderFillRect(render, &grid.board[i][j].pos);
-                }
-            }
-        }
+        
+        /* Draw clicked cells */
+        draw_cells(render, &grid, player);
 
          /* Set grid colour details */
         SDL_SetRenderDrawColor(render, grid.colours.line.r, grid.colours.line.g,
@@ -236,6 +215,7 @@ main(int argc, char* argv[]) {
     return EXIT_SUCCESS;
 }
 
+/* Randomly generates NUM_MINES mines into the board */
 void
 generate_mines(cell_t board[GRID_HEIGHT][GRID_WIDTH]) {
     int y, x;
@@ -244,5 +224,34 @@ generate_mines(cell_t board[GRID_HEIGHT][GRID_WIDTH]) {
         x = (rand() % GRID_WIDTH);      // Returns a pseudo-random integer between 0 and GW-1
         board[x][y].ismine = SDL_TRUE;
         printf("Mine at (%d, %d)\n", x,y);
+    }
+}
+
+/* Draws each clicked cell onto the screen */
+void
+draw_cells(SDL_Renderer* render, grid_t* grid, cell_t player) {
+    for (int i=0; i<GRID_HEIGHT; i++) {
+        for (int j=0; j<GRID_WIDTH; j++) {
+
+            if (player.pos.x == grid->board[i][j].pos.x &&
+                    player.pos.y == grid->board[i][j].pos.y) {
+                grid->board[i][j].clicked = SDL_TRUE;
+            }
+
+            if (grid->board[i][j].clicked == SDL_TRUE) {
+                if (grid->board[i][j].ismine) {
+                    SDL_SetRenderDrawColor(render, grid->colours.mine.r,
+                                grid->colours.mine.g,
+                                grid->colours.mine.b,
+                                grid->colours.mine.a);
+                } else {
+                    SDL_SetRenderDrawColor(render, grid->colours.clicked.r,
+                                grid->colours.clicked.g,
+                                grid->colours.clicked.b,
+                                grid->colours.clicked.a);
+                }
+                SDL_RenderFillRect(render, &grid->board[i][j].pos);
+            }
+        }
     }
 }
