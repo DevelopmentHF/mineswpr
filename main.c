@@ -1,6 +1,7 @@
 #include <SDL2/SDL.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <time.h>
 
 /*============================================================================*/
 
@@ -9,6 +10,7 @@
 #define GRID_WIDTH (21)     // number of cells x-dir
 #define WINDOW_HEIGHT (CELLSIZE*GRID_HEIGHT + 1)   // size of window y-dir
 #define WINDOW_WIDTH (CELLSIZE*GRID_WIDTH + 1)    // size of window x-dir
+#define NUM_MINES (10)      // number of mines on the board
 
 /*============================================================================*/
 typedef struct {
@@ -22,11 +24,13 @@ typedef struct {
     SDL_Color ghost;
     SDL_Color line;
     SDL_Color clicked;
+    SDL_Color mine;
 } colours_t;
 
 typedef struct {
     colours_t colours;
     cell_t board[GRID_HEIGHT][GRID_WIDTH];
+    cell_t mines[GRID_HEIGHT][GRID_WIDTH];
 } grid_t;
 
 typedef struct {
@@ -36,8 +40,14 @@ typedef struct {
 
 /*============================================================================*/
 
+void generate_mines(cell_t board[GRID_HEIGHT][GRID_WIDTH]);
+
+/*============================================================================*/
+
 int
 main(int argc, char* argv[]) {
+
+    srand(time(NULL)); // Initialization, should only be called once.
 
     /* Initialise SDL */
     if (SDL_Init(SDL_INIT_VIDEO)) {
@@ -110,6 +120,12 @@ main(int argc, char* argv[]) {
     grid.colours.clicked.b = 121;
     grid.colours.clicked.a = 255;
 
+    // Red          - Hit a mine colouring
+    grid.colours.mine.r = 255;
+    grid.colours.mine.g = 0;
+    grid.colours.mine.b = 0;
+    grid.colours.mine.a = 255;
+
     /* Initialise the board details */
     for (int i=0; i<GRID_HEIGHT; i++) {
         for (int j=0; j<GRID_WIDTH; j++) {
@@ -118,9 +134,10 @@ main(int argc, char* argv[]) {
             grid.board[i][j].pos.w = CELLSIZE;
             grid.board[i][j].pos.h = CELLSIZE;
             grid.board[i][j].clicked = SDL_FALSE;
+            grid.board[i][j].ismine = SDL_FALSE;
         }
     }
-
+    generate_mines(grid.board);
     /* Initialise mouse details */
     mouse_t mouse;
     mouse.active = SDL_FALSE;
@@ -159,11 +176,44 @@ main(int argc, char* argv[]) {
                                 grid.colours.bg.b, grid.colours.bg.a);
         SDL_RenderClear(render);
 
-        /* Set grid colour details */
+        /* Draw ghost cursor */
+        if (mouse.active && mouse.hover) {
+            SDL_SetRenderDrawColor(render, grid.colours.ghost.r,
+                                   grid.colours.ghost.g,
+                                   grid.colours.ghost.b,
+                                   grid.colours.ghost.a);
+            SDL_RenderFillRect(render, &ghost.pos);
+        }
+
+        for (int i=0; i<GRID_HEIGHT; i++) {
+            for (int j=0; j<GRID_WIDTH; j++) {
+
+                if (player.pos.x == grid.board[i][j].pos.x &&
+                        player.pos.y == grid.board[i][j].pos.y) {
+                    grid.board[i][j].clicked = SDL_TRUE;
+                }
+
+                if (grid.board[i][j].clicked == SDL_TRUE) {
+                    if (grid.board[i][j].ismine) {
+                        SDL_SetRenderDrawColor(render, grid.colours.mine.r,
+                                   grid.colours.mine.g,
+                                   grid.colours.mine.b,
+                                   grid.colours.mine.a);
+                    } else {
+                        SDL_SetRenderDrawColor(render, grid.colours.clicked.r,
+                                   grid.colours.clicked.g,
+                                   grid.colours.clicked.b,
+                                   grid.colours.clicked.a);
+                    }
+                    SDL_RenderFillRect(render, &grid.board[i][j].pos);
+                }
+            }
+        }
+
+         /* Set grid colour details */
         SDL_SetRenderDrawColor(render, grid.colours.line.r, grid.colours.line.g,
                                 grid.colours.line.b, grid.colours.line.a);
-
-        /* Draw vertical lines */
+         /* Draw vertical lines */
         for (int x = 0; x <= GRID_WIDTH * CELLSIZE;
             x += CELLSIZE) {
             SDL_RenderDrawLine(render, x, 0, x, WINDOW_HEIGHT);
@@ -175,40 +225,6 @@ main(int argc, char* argv[]) {
             SDL_RenderDrawLine(render, 0, y, WINDOW_WIDTH, y);
         }
 
-
-        for (int i=0; i<GRID_HEIGHT; i++) {
-            for (int j=0; j<GRID_WIDTH; j++) {
-
-                if (player.pos.x == grid.board[i][j].pos.x &&
-                        player.pos.y == grid.board[i][j].pos.y) {
-                    grid.board[i][j].clicked = SDL_TRUE;
-                }
-
-                if (grid.board[i][j].clicked == SDL_TRUE) {
-                    SDL_SetRenderDrawColor(render, grid.colours.clicked.r,
-                                   grid.colours.clicked.g,
-                                   grid.colours.clicked.b,
-                                   grid.colours.clicked.a);
-                    SDL_RenderFillRect(render, &grid.board[i][j].pos);
-                }
-            }
-        }
-
-        /* Draw ghost cursor */
-        if (mouse.active && mouse.hover) {
-            SDL_SetRenderDrawColor(render, grid.colours.ghost.r,
-                                   grid.colours.ghost.g,
-                                   grid.colours.ghost.b,
-                                   grid.colours.ghost.a);
-            SDL_RenderFillRect(render, &ghost.pos);
-        }
-
-        // Draw last clicked grid cursor to overwrite ghost
-        SDL_SetRenderDrawColor(render, grid.colours.clicked.r,
-                               grid.colours.clicked.g, grid.colours.clicked.b,
-                               grid.colours.clicked.a);
-        SDL_RenderFillRect(render, &player.pos);
-
         SDL_RenderPresent(render);
     }
 
@@ -218,4 +234,15 @@ main(int argc, char* argv[]) {
     SDL_Quit();
 
     return EXIT_SUCCESS;
+}
+
+void
+generate_mines(cell_t board[GRID_HEIGHT][GRID_WIDTH]) {
+    int y, x;
+    for (int i=0; i<NUM_MINES; i++) {
+        y = (rand() % GRID_HEIGHT);      // Returns a pseudo-random integer between 0 and GH-1
+        x = (rand() % GRID_WIDTH);      // Returns a pseudo-random integer between 0 and GW-1
+        board[x][y].ismine = SDL_TRUE;
+        printf("Mine at (%d, %d)\n", x,y);
+    }
 }
