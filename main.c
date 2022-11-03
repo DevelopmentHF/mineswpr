@@ -12,19 +12,21 @@
 
 /*============================================================================*/
 typedef struct {
-    SDL_Rect pos;        // position details of the cursor
-} cursor_t;
-
-typedef struct {
-    SDL_Texture* texture;
     SDL_Rect pos;
-} mine_t;
+    SDL_bool clicked;
+    SDL_bool ismine;
+} cell_t;
 
 typedef struct {
-    SDL_Color bg_colour;
-    SDL_Color line_colour;
-    SDL_Color ghost_colour;
-    SDL_Color cursor_colour;
+    SDL_Color bg;
+    SDL_Color ghost;
+    SDL_Color line;
+    SDL_Color clicked;
+} colours_t;
+
+typedef struct {
+    colours_t colours;
+    cell_t board[GRID_HEIGHT][GRID_WIDTH];
 } grid_t;
 
 typedef struct {
@@ -32,14 +34,6 @@ typedef struct {
     SDL_bool hover;
 } mouse_t;
 
-typedef struct {
-    SDL_Rect pos;
-    SDL_bool clicked;
-} cell_t;
-
-typedef struct {
-    cell_t grid[21][21];
-} gridcells_t;
 /*============================================================================*/
 
 int
@@ -80,75 +74,71 @@ main(int argc, char* argv[]) {
         return EXIT_FAILURE;
     }
 
-    /* Place the grid cursor in the middle of the screen */
-    cursor_t cursor;
-    // cursor.pos.x =  (GRID_WIDTH - 1) / 2 * CELLSIZE;
-    // cursor.pos.y =  (GRID_HEIGHT - 1) / 2 * CELLSIZE;
-    cursor.pos.w = CELLSIZE;
-    cursor.pos.h = CELLSIZE;
+    /* Player cell details */
+    cell_t player;
+    player.pos.w = CELLSIZE;
+    player.pos.h = CELLSIZE;
 
     /* Cell below the cursors current position */
-    cursor_t ghost_cursor;
-    ghost_cursor.pos.x = cursor.pos.x;
-    ghost_cursor.pos.y = cursor.pos.y;
-    ghost_cursor.pos.w = CELLSIZE;
-    ghost_cursor.pos.h = CELLSIZE;
+    cell_t ghost;
+    ghost.pos.x = player.pos.x;
+    ghost.pos.y = player.pos.y;
+    ghost.pos.w = CELLSIZE;
+    ghost.pos.h = CELLSIZE;
 
     /* Initialise grid details */
     grid_t grid;
-    // Barely Black
-    grid.bg_colour.r = 22;
-    grid.bg_colour.g = 22;
-    grid.bg_colour.b = 22;
-    grid.bg_colour.a = 255;
+    // Barely Black - Background Colour
+    grid.colours.bg.r = 22;
+    grid.colours.bg.g = 22;
+    grid.colours.bg.b = 22;
+    grid.colours.bg.a = 255;
 
-    // Dark grey
-    grid.line_colour.r = 44;
-    grid.line_colour.g = 44;
-    grid.line_colour.b = 44;
-    grid.line_colour.a = 255;
+    // Dark grey    - Line and Ghost colouring
+    grid.colours.line.r = 44;
+    grid.colours.line.g = 44;
+    grid.colours.line.b = 44;
+    grid.colours.line.a = 255;
+    grid.colours.ghost.r = 44;
+    grid.colours.ghost.g = 44;
+    grid.colours.ghost.b = 44;
+    grid.colours.ghost.a = 255;
 
-    // other
-    grid.ghost_colour.r = 28;
-    grid.ghost_colour.g = 200;
-    grid.ghost_colour.b = 121;
-    grid.ghost_colour.a = 255;
+    // Green        - Successful click colouring
+    grid.colours.clicked.r = 28;
+    grid.colours.clicked.g = 200;
+    grid.colours.clicked.b = 121;
+    grid.colours.clicked.a = 255;
 
-    // White
-    grid.cursor_colour.r = 255;
-    grid.cursor_colour.g = 255;
-    grid.cursor_colour.b = 255;
-    grid.cursor_colour.a = 255;
-
-    gridcells_t gridcells;
-        for (int i=0; i<GRID_HEIGHT; i++) {
-            for (int j=0; j<GRID_WIDTH; j++) {
-                gridcells.grid[i][j].pos.x = i*CELLSIZE;
-                gridcells.grid[i][j].pos.y = j*CELLSIZE;
-                gridcells.grid[i][j].pos.w = CELLSIZE;
-                gridcells.grid[i][j].pos.h = CELLSIZE;
-                gridcells.grid[i][j].clicked = SDL_FALSE;
-            }
+    /* Initialise the board details */
+    for (int i=0; i<GRID_HEIGHT; i++) {
+        for (int j=0; j<GRID_WIDTH; j++) {
+            grid.board[i][j].pos.x = i*CELLSIZE;
+            grid.board[i][j].pos.y = j*CELLSIZE;
+            grid.board[i][j].pos.w = CELLSIZE;
+            grid.board[i][j].pos.h = CELLSIZE;
+            grid.board[i][j].clicked = SDL_FALSE;
         }
+    }
 
-    /* Init loop details */
+    /* Initialise mouse details */
     mouse_t mouse;
     mouse.active = SDL_FALSE;
     mouse.hover = SDL_FALSE;
-    SDL_bool hasquit = SDL_FALSE;
 
+    SDL_bool hasquit = SDL_FALSE;
     /* Animation Loop */
     while (!hasquit) {
         SDL_Event event;
         while (SDL_PollEvent(&event)) {
             switch (event.type) {
             case SDL_MOUSEBUTTONDOWN:
-                cursor.pos.x = (event.motion.x / CELLSIZE) * CELLSIZE;
-                cursor.pos.y = (event.motion.y / CELLSIZE) * CELLSIZE;
+                player.pos.x = (event.motion.x / CELLSIZE) * CELLSIZE;
+                player.pos.y = (event.motion.y / CELLSIZE) * CELLSIZE;
                 break;
             case SDL_MOUSEMOTION:
-                ghost_cursor.pos.x = (event.motion.x / CELLSIZE) * CELLSIZE;
-                ghost_cursor.pos.y = (event.motion.y / CELLSIZE) * CELLSIZE;
+                ghost.pos.x = (event.motion.x / CELLSIZE) * CELLSIZE;
+                ghost.pos.y = (event.motion.y / CELLSIZE) * CELLSIZE;
                 if (!mouse.active)
                     mouse.active = SDL_TRUE;
                 break;
@@ -165,13 +155,13 @@ main(int argc, char* argv[]) {
         }
 
         /* Draw the background */
-        SDL_SetRenderDrawColor(render, grid.bg_colour.r, grid.bg_colour.g,
-                                grid.bg_colour.b, grid.bg_colour.a);
+        SDL_SetRenderDrawColor(render, grid.colours.bg.r, grid.colours.bg.g,
+                                grid.colours.bg.b, grid.colours.bg.a);
         SDL_RenderClear(render);
 
         /* Set grid colour details */
-        SDL_SetRenderDrawColor(render, grid.line_colour.r, grid.line_colour.g,
-                                grid.line_colour.b, grid.line_colour.a);
+        SDL_SetRenderDrawColor(render, grid.colours.line.r, grid.colours.line.g,
+                                grid.colours.line.b, grid.colours.line.a);
 
         /* Draw vertical lines */
         for (int x = 0; x <= GRID_WIDTH * CELLSIZE;
@@ -188,34 +178,36 @@ main(int argc, char* argv[]) {
 
         for (int i=0; i<GRID_HEIGHT; i++) {
             for (int j=0; j<GRID_WIDTH; j++) {
-                if (cursor.pos.x == gridcells.grid[i][j].pos.x && cursor.pos.y == gridcells.grid[i][j].pos.y) {
-                    gridcells.grid[i][j].clicked = SDL_TRUE;
+
+                if (player.pos.x == grid.board[i][j].pos.x &&
+                        player.pos.y == grid.board[i][j].pos.y) {
+                    grid.board[i][j].clicked = SDL_TRUE;
                 }
 
-                if (gridcells.grid[i][j].clicked == SDL_TRUE) {
-                    SDL_SetRenderDrawColor(render, grid.ghost_colour.r,
-                                   grid.ghost_colour.g,
-                                   grid.ghost_colour.b,
-                                   grid.ghost_colour.a);
-                    SDL_RenderFillRect(render, &gridcells.grid[i][j].pos);
+                if (grid.board[i][j].clicked == SDL_TRUE) {
+                    SDL_SetRenderDrawColor(render, grid.colours.clicked.r,
+                                   grid.colours.clicked.g,
+                                   grid.colours.clicked.b,
+                                   grid.colours.clicked.a);
+                    SDL_RenderFillRect(render, &grid.board[i][j].pos);
                 }
             }
         }
 
         /* Draw ghost cursor */
         if (mouse.active && mouse.hover) {
-            SDL_SetRenderDrawColor(render, grid.ghost_colour.r,
-                                   grid.ghost_colour.g,
-                                   grid.ghost_colour.b,
-                                   grid.ghost_colour.a);
-            SDL_RenderFillRect(render, &ghost_cursor.pos);
+            SDL_SetRenderDrawColor(render, grid.colours.ghost.r,
+                                   grid.colours.ghost.g,
+                                   grid.colours.ghost.b,
+                                   grid.colours.ghost.a);
+            SDL_RenderFillRect(render, &ghost.pos);
         }
 
-        // Draw last clicked grid cursor.
-        SDL_SetRenderDrawColor(render, grid.ghost_colour.r,
-                               grid.ghost_colour.g, grid.ghost_colour.b,
-                               grid.ghost_colour.a);
-        SDL_RenderFillRect(render, &cursor.pos);
+        // Draw last clicked grid cursor to overwrite ghost
+        SDL_SetRenderDrawColor(render, grid.colours.clicked.r,
+                               grid.colours.clicked.g, grid.colours.clicked.b,
+                               grid.colours.clicked.a);
+        SDL_RenderFillRect(render, &player.pos);
 
         SDL_RenderPresent(render);
     }
