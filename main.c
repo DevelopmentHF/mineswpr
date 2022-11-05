@@ -325,6 +325,7 @@ draw_cells(game_t* game, mouse_t* mouse) {
                 /* Check if this click was a flag/unflag */
                 if (mouse->rightclick == SDL_TRUE) {
                     game->board[i][j].state.isflag = !game->board[i][j].state.isflag;
+                    mouse->rightclick = SDL_FALSE;
                 }
             }
 
