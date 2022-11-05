@@ -1,7 +1,11 @@
-#include <SDL2/SDL.h>
-#include <stdlib.h>
-#include <stdio.h>
 #include <time.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <SDL2/SDL.h>
+#include <SDL2/SDL_ttf.h>
+#include <SDL2/SDL_image.h>
+#include <assert.h>
+
 
 /*============================================================================*/
 
@@ -10,54 +14,76 @@
 #define GRID_WIDTH (21)     // number of cells x-dir
 #define WINDOW_HEIGHT (CELLSIZE*GRID_HEIGHT + 1)   // size of window y-dir
 #define WINDOW_WIDTH (CELLSIZE*GRID_WIDTH + 1)    // size of window x-dir
-#define NUM_MINES (10)      // number of mines on the board
+#define NUM_MINES (35)      // number of mines on the board
 
 /*============================================================================*/
 typedef struct {
-    SDL_Rect pos;
+    SDL_Surface* mine;
+    SDL_Surface* hitmine;
+    SDL_Surface* def;
+    SDL_Surface* flag;
+    SDL_Surface *zero, *one, *two, *three, *four, *five, *six, *seven, *eight;
+} surfaces_t;
+
+typedef struct {
+    SDL_Texture* mine;
+    SDL_Texture* hitmine;
+    SDL_Texture* def;
+    SDL_Texture* flag;
+    SDL_Texture *zero, *one, *two, *three, *four, *five, *six, *seven, *eight;
+} textures_t;
+
+typedef struct {
     SDL_bool clicked;
+    SDL_bool isflag;
     SDL_bool ismine;
+    int numtouching;
+} state_t;
+
+typedef struct {
+    SDL_Rect pos;
+    state_t state;
 } cell_t;
-
-typedef struct {
-    SDL_Color bg;
-    SDL_Color ghost;
-    SDL_Color line;
-    SDL_Color clicked;
-    SDL_Color mine;
-} colours_t;
-
-typedef struct {
-    colours_t colours;
-    cell_t board[GRID_HEIGHT][GRID_WIDTH];
-    cell_t mines[GRID_HEIGHT][GRID_WIDTH];
-} grid_t;
 
 typedef struct {
     SDL_bool active;
     SDL_bool hover;
+    SDL_bool rightclick;
 } mouse_t;
 
-/*============================================================================*/
+typedef struct {
+    SDL_Window* window;
+    SDL_Renderer* render;
+    surfaces_t surfaces;
+    textures_t textures;
+    cell_t board[GRID_HEIGHT][GRID_WIDTH];
+    cell_t current;
+    SDL_bool hasquit;
+} game_t;
 
-void generate_mines(cell_t board[GRID_HEIGHT][GRID_WIDTH]);
-void draw_cells(SDL_Renderer* render, grid_t* grid, cell_t player);
-
 /*============================================================================*/
+void load_surfaces(game_t* game);
+void generate_mines(game_t* game);
+void init_cell_details(game_t* game);
+void generate_touching_details(game_t* game);
+void init_tx(game_t* game);
+void draw_cells(game_t* game, mouse_t* mouse);
+/*================================================*/
 
 int
-main(int argc, char* argv[]) {
+main(int argc, char** argv) {
 
-    srand(time(NULL)); // Initialization, should only be called once.
-
-    /* Initialise SDL */
+    srand(time(NULL)); // For random mine generation
+    game_t game;
+    mouse_t mouse;
+    /* Initialise SDL  */
     if (SDL_Init(SDL_INIT_VIDEO)) {
         printf("Error init: %s\n", SDL_GetError());
         return EXIT_FAILURE;
     }
 
     /* Create a window */
-    SDL_Window* window = SDL_CreateWindow("Minesweeper",
+    game.window = SDL_CreateWindow("Minesweeper",
                                         SDL_WINDOWPOS_CENTERED,
                                         SDL_WINDOWPOS_CENTERED,
                                         WINDOW_WIDTH,
@@ -65,7 +91,7 @@ main(int argc, char* argv[]) {
                                         0);
 
     /* Check if the window was created successfully */
-    if (!window) {
+    if (!game.window) {
         printf("Error window init: %s\n", SDL_GetError());
         /* Exit out */
         SDL_Quit();
@@ -73,92 +99,50 @@ main(int argc, char* argv[]) {
     }
 
     /* Create renderer */
-    SDL_Renderer* render = SDL_CreateRenderer(
-                                window, -1, SDL_RENDERER_ACCELERATED);
+    game.render = SDL_CreateRenderer(
+                                game.window, -1, SDL_RENDERER_ACCELERATED);
 
     /* Check renderer was created successfully*/
-    if (!render) {
+    if (!game.render) {
         printf("Error render init: %s\n", SDL_GetError());
         /* Exit out */
-        SDL_DestroyWindow(window);
+        SDL_DestroyWindow(game.window);
         SDL_Quit();
         return EXIT_FAILURE;
     }
 
-    /* Player cell details */
-    cell_t player;
-    player.pos.w = CELLSIZE;
-    player.pos.h = CELLSIZE;
+    /* Load in surfaces */
+    load_surfaces(&game);
 
-    /* Cell below the cursors current position */
-    cell_t ghost;
-    ghost.pos.x = player.pos.x;
-    ghost.pos.y = player.pos.y;
-    ghost.pos.w = CELLSIZE;
-    ghost.pos.h = CELLSIZE;
+    /* Generate mine details */
+    generate_mines(&game);
 
-    /* Initialise grid details */
-    grid_t grid;
-    // Barely Black - Background Colour
-    grid.colours.bg.r = 22;
-    grid.colours.bg.g = 22;
-    grid.colours.bg.b = 22;
-    grid.colours.bg.a = 255;
+    /* Initialise cell details (position, states etc) */
+    init_cell_details(&game);
 
-    // Dark grey    - Line and Ghost colouring
-    grid.colours.line.r = 44;
-    grid.colours.line.g = 44;
-    grid.colours.line.b = 44;
-    grid.colours.line.a = 255;
-    grid.colours.ghost.r = 44;
-    grid.colours.ghost.g = 44;
-    grid.colours.ghost.b = 44;
-    grid.colours.ghost.a = 255;
 
-    // Green        - Successful click colouring
-    grid.colours.clicked.r = 28;
-    grid.colours.clicked.g = 200;
-    grid.colours.clicked.b = 121;
-    grid.colours.clicked.a = 255;
+    /* Load in textures */
+    init_tx(&game);
 
-    // Red          - Hit a mine colouring
-    grid.colours.mine.r = 255;
-    grid.colours.mine.g = 0;
-    grid.colours.mine.b = 0;
-    grid.colours.mine.a = 255;
-
-    /* Initialise the board details */
-    for (int i=0; i<GRID_HEIGHT; i++) {
-        for (int j=0; j<GRID_WIDTH; j++) {
-            grid.board[i][j].pos.x = i*CELLSIZE;
-            grid.board[i][j].pos.y = j*CELLSIZE;
-            grid.board[i][j].pos.w = CELLSIZE;
-            grid.board[i][j].pos.h = CELLSIZE;
-            grid.board[i][j].clicked = SDL_FALSE;
-            grid.board[i][j].ismine = SDL_FALSE;
-        }
-    }
-    generate_mines(grid.board);
     /* Initialise mouse details */
-    mouse_t mouse;
     mouse.active = SDL_FALSE;
     mouse.hover = SDL_FALSE;
 
-    SDL_bool hasquit = SDL_FALSE;
-    /* Animation Loop */
-    while (!hasquit) {
+    /* Animation loop */
+    game.hasquit = SDL_FALSE;
+    while(game.hasquit == SDL_FALSE) {
         SDL_Event event;
         while (SDL_PollEvent(&event)) {
             switch (event.type) {
             case SDL_MOUSEBUTTONDOWN:
-                player.pos.x = (event.motion.x / CELLSIZE) * CELLSIZE;
-                player.pos.y = (event.motion.y / CELLSIZE) * CELLSIZE;
-                break;
-            case SDL_MOUSEMOTION:
-                ghost.pos.x = (event.motion.x / CELLSIZE) * CELLSIZE;
-                ghost.pos.y = (event.motion.y / CELLSIZE) * CELLSIZE;
-                if (!mouse.active)
-                    mouse.active = SDL_TRUE;
+                game.current.pos.x = (event.motion.x / CELLSIZE) * CELLSIZE;
+                game.current.pos.y = (event.motion.y / CELLSIZE) * CELLSIZE;
+                /* Check for flagging/unflagging a cell */
+                if (event.button.button == SDL_BUTTON_RIGHT) {
+                    mouse.rightclick = SDL_TRUE;
+                } else {
+                    mouse.rightclick = SDL_FALSE;
+                }
                 break;
             case SDL_WINDOWEVENT:
                 if (event.window.event == SDL_WINDOWEVENT_ENTER && !mouse.hover)
@@ -167,90 +151,214 @@ main(int argc, char* argv[]) {
                     mouse.hover = SDL_FALSE;
                 break;
             case SDL_QUIT:
-                hasquit = SDL_TRUE;
+                game.hasquit = SDL_TRUE;
                 break;
             }
         }
+        /* Draw all cells */
+        draw_cells(&game, &mouse);
 
-        /* Draw the background */
-        SDL_SetRenderDrawColor(render, grid.colours.bg.r, grid.colours.bg.g,
-                                grid.colours.bg.b, grid.colours.bg.a);
-        SDL_RenderClear(render);
-
-        /* Draw ghost cursor */
-        if (mouse.active && mouse.hover) {
-            SDL_SetRenderDrawColor(render, grid.colours.ghost.r,
-                                   grid.colours.ghost.g,
-                                   grid.colours.ghost.b,
-                                   grid.colours.ghost.a);
-            SDL_RenderFillRect(render, &ghost.pos);
-        }
-        
-        /* Draw clicked cells */
-        draw_cells(render, &grid, player);
-
-         /* Set grid colour details */
-        SDL_SetRenderDrawColor(render, grid.colours.line.r, grid.colours.line.g,
-                                grid.colours.line.b, grid.colours.line.a);
-         /* Draw vertical lines */
-        for (int x = 0; x <= GRID_WIDTH * CELLSIZE;
-            x += CELLSIZE) {
-            SDL_RenderDrawLine(render, x, 0, x, WINDOW_HEIGHT);
-        }
-
-        /* Draw horizontal lines */
-        for (int y = 0; y <= GRID_HEIGHT * CELLSIZE;
-                y += CELLSIZE) {
-            SDL_RenderDrawLine(render, 0, y, WINDOW_WIDTH, y);
-        }
-
-        SDL_RenderPresent(render);
+        SDL_RenderPresent(game.render);
+        SDL_Delay(1000/24);
     }
 
-    /* Clean up*/
-    SDL_DestroyRenderer(render);
-    SDL_DestroyWindow(window);
+    SDL_DestroyRenderer(game.render);
+    SDL_DestroyWindow(game.window);
     SDL_Quit();
 
     return EXIT_SUCCESS;
 }
 
-/* Randomly generates NUM_MINES mines into the board */
 void
-generate_mines(cell_t board[GRID_HEIGHT][GRID_WIDTH]) {
-    int y, x;
+load_surfaces(game_t* game) {
+    game->surfaces.def = IMG_Load("resources/pngs/base_square_small.png");
+    game->surfaces.zero = IMG_Load("resources/pngs/clicked_square.png");
+    game->surfaces.mine = IMG_Load("resources/pngs/mine.png");
+    game->surfaces.hitmine = IMG_Load("resources/pngs/hitmine.png");
+    game->surfaces.flag = IMG_Load("resources/pngs/flag.png");
+    game->surfaces.one = IMG_Load("resources/pngs/one.png");
+    game->surfaces.two = IMG_Load("resources/pngs/two.png");
+    game->surfaces.three = IMG_Load("resources/pngs/three.png");
+    game->surfaces.four = IMG_Load("resources/pngs/four.png");
+    game->surfaces.five = IMG_Load("resources/pngs/five.png");
+    game->surfaces.six = IMG_Load("resources/pngs/six.png");
+    game->surfaces.seven = IMG_Load("resources/pngs/seven.png");
+    game->surfaces.eight = IMG_Load("resources/pngs/eight.png");
+
+}
+
+void
+generate_mines(game_t* game) {
+    int x,y;
     for (int i=0; i<NUM_MINES; i++) {
         y = (rand() % GRID_HEIGHT);      // Returns a pseudo-random integer between 0 and GH-1
-        x = (rand() % GRID_WIDTH);      // Returns a pseudo-random integer between 0 and GW-1
-        board[x][y].ismine = SDL_TRUE;
+        x = (rand() % GRID_WIDTH);    
+        game->board[y][x].state.ismine = SDL_TRUE;
         printf("Mine at (%d, %d)\n", x,y);
     }
 }
 
-/* Draws each clicked cell onto the screen */
 void
-draw_cells(SDL_Renderer* render, grid_t* grid, cell_t player) {
+init_cell_details(game_t* game) {
+    /* Loop through all cells */
     for (int i=0; i<GRID_HEIGHT; i++) {
-        for (int j=0; j<GRID_WIDTH; j++) {
+        for (int j=0;j<GRID_WIDTH; j++) {
+            game->board[i][j].pos.y = i*CELLSIZE;
+            game->board[i][j].pos.x = j*CELLSIZE;
+            game->board[i][j].pos.w = CELLSIZE;
+            game->board[i][j].pos.h = CELLSIZE;
+            game->board[i][j].state.clicked = SDL_FALSE;
+            game->board[i][j].state.isflag = SDL_FALSE;
+            game->board[i][j].state.numtouching = 0;
+            if (game->board[i][j].state.ismine != SDL_TRUE) {
+                game->board[i][j].state.ismine = SDL_FALSE;
+            }
+        }
+    }
+    generate_touching_details(game);
+}
 
-            if (player.pos.x == grid->board[i][j].pos.x &&
-                    player.pos.y == grid->board[i][j].pos.y) {
-                grid->board[i][j].clicked = SDL_TRUE;
+void
+generate_touching_details(game_t* game) {
+    /* Needs to check all 8 positions around each mine */
+    /* Loop through all cells */
+    for (int y=0; y<GRID_HEIGHT; y++) {
+        for (int x=0;x<GRID_WIDTH; x++) {
+            /* Check all cells around this one */
+            /* Check cell above */
+            if (y>0) {
+                if (game->board[x][y-1].state.ismine == SDL_TRUE) {
+                    game->board[x][y].state.numtouching++;
+                }
+            }
+            /* Check cell below */
+            if (y<GRID_HEIGHT-1) {
+                if (game->board[x][y+1].state.ismine == SDL_TRUE) {
+                    game->board[x][y].state.numtouching++;
+                }
             }
 
-            if (grid->board[i][j].clicked == SDL_TRUE) {
-                if (grid->board[i][j].ismine) {
-                    SDL_SetRenderDrawColor(render, grid->colours.mine.r,
-                                grid->colours.mine.g,
-                                grid->colours.mine.b,
-                                grid->colours.mine.a);
-                } else {
-                    SDL_SetRenderDrawColor(render, grid->colours.clicked.r,
-                                grid->colours.clicked.g,
-                                grid->colours.clicked.b,
-                                grid->colours.clicked.a);
+            /* Check cell to the left */
+            if (x>0) {
+                if (game->board[x-1][y].state.ismine == SDL_TRUE) {
+                    game->board[x][y].state.numtouching++;
                 }
-                SDL_RenderFillRect(render, &grid->board[i][j].pos);
+            }
+
+            /* Check cell to the right */
+            if (x<GRID_WIDTH-1) {
+                if (game->board[x+1][y].state.ismine == SDL_TRUE) {
+                    game->board[x][y].state.numtouching++;
+                }
+            }
+
+            /* Check left upper diagonal cell */
+            if (x>0 && y>0) {
+                if (game->board[x-1][y-1].state.ismine == SDL_TRUE) {
+                    game->board[x][y].state.numtouching++;
+                }
+            }
+
+            /* Check right upper diagonal cell */
+            if (x<GRID_WIDTH-1 && y>0) {
+                if (game->board[x+1][y-1].state.ismine == SDL_TRUE) {
+                    game->board[x][y].state.numtouching++;
+                }
+            }
+
+            /* Check left bottom diagonal cell */
+            if (x>0 && y<GRID_HEIGHT-1) {
+                if (game->board[x-1][y+1].state.ismine == SDL_TRUE) {
+                    game->board[x][y].state.numtouching++;
+                }
+            }
+
+            /* Check right bottom diagonal cell */
+            if (x<GRID_WIDTH-1 && y<GRID_HEIGHT-1) {
+                if (game->board[x+1][y+1].state.ismine == SDL_TRUE) {
+                    game->board[x][y].state.numtouching++;
+                }
+            }
+        }
+    }
+}
+
+void
+init_tx(game_t* game) {
+    game->textures.def = SDL_CreateTextureFromSurface(game->render, game->surfaces.def);
+    game->textures.zero = SDL_CreateTextureFromSurface(game->render, game->surfaces.zero);
+    game->textures.mine = SDL_CreateTextureFromSurface(game->render, game->surfaces.mine);
+    game->textures.hitmine = SDL_CreateTextureFromSurface(game->render, game->surfaces.hitmine);
+    game->textures.flag = SDL_CreateTextureFromSurface(game->render, game->surfaces.flag);
+    game->textures.one = SDL_CreateTextureFromSurface(game->render, game->surfaces.one);
+    game->textures.two = SDL_CreateTextureFromSurface(game->render, game->surfaces.two);
+    game->textures.three = SDL_CreateTextureFromSurface(game->render, game->surfaces.three);
+    game->textures.four = SDL_CreateTextureFromSurface(game->render, game->surfaces.four);
+    game->textures.five = SDL_CreateTextureFromSurface(game->render, game->surfaces.five);
+    game->textures.six = SDL_CreateTextureFromSurface(game->render, game->surfaces.six);
+    game->textures.seven = SDL_CreateTextureFromSurface(game->render, game->surfaces.seven);
+    game->textures.eight = SDL_CreateTextureFromSurface(game->render, game->surfaces.eight);
+
+    SDL_FreeSurface(game->surfaces.def);
+    SDL_FreeSurface(game->surfaces.zero);
+    SDL_FreeSurface(game->surfaces.mine);
+    SDL_FreeSurface(game->surfaces.hitmine);
+    SDL_FreeSurface(game->surfaces.flag);
+    SDL_FreeSurface(game->surfaces.one);
+    SDL_FreeSurface(game->surfaces.two);
+    SDL_FreeSurface(game->surfaces.three);
+    SDL_FreeSurface(game->surfaces.four);
+    SDL_FreeSurface(game->surfaces.five);
+    SDL_FreeSurface(game->surfaces.six);
+    SDL_FreeSurface(game->surfaces.seven);
+    SDL_FreeSurface(game->surfaces.eight);
+}
+
+void
+draw_cells(game_t* game, mouse_t* mouse) {
+    for (int i=0; i<GRID_HEIGHT; i++) {
+        for (int j=0; j<GRID_WIDTH; j++) {
+            /* Set if the cell has been clicked */
+            if (game->current.pos.x == game->board[i][j].pos.x && game->current.pos.y == game->board[i][j].pos.y) {
+                game->board[i][j].state.clicked = SDL_TRUE;
+                printf("click at (%d, %d)\n", j, i);
+                /* Check if this click was a flag/unflag */
+                if (mouse->rightclick == SDL_TRUE) {
+                    game->board[i][j].state.isflag = !game->board[i][j].state.isflag;
+                }
+            }
+
+            /* Cell hasnt been clicked */
+            if (game->board[i][j].state.clicked == SDL_FALSE) {
+                /* Thus render def view */
+                SDL_RenderCopy(game->render, game->textures.def, NULL, &game->board[i][j].pos);
+            /* Cell has been flagged */
+            } else if (game->board[i][j].state.isflag) {
+                SDL_RenderCopy(game->render, game->textures.flag, NULL, &game->board[i][j].pos);
+            /* Display a number */
+            } else if (game->board[i][j].state.ismine == SDL_FALSE) {
+                if (game->board[i][j].state.numtouching == 0) {
+                    SDL_RenderCopy(game->render, game->textures.zero, NULL, &game->board[i][j].pos);
+                } else if (game->board[i][j].state.numtouching == 1) {
+                    SDL_RenderCopy(game->render, game->textures.one, NULL, &game->board[i][j].pos);
+                } else if (game->board[i][j].state.numtouching == 2) {
+                    SDL_RenderCopy(game->render, game->textures.two, NULL, &game->board[i][j].pos);
+                } else if (game->board[i][j].state.numtouching == 3) {
+                    SDL_RenderCopy(game->render, game->textures.three, NULL, &game->board[i][j].pos);
+                } else if (game->board[i][j].state.numtouching == 4) {
+                    SDL_RenderCopy(game->render, game->textures.four, NULL, &game->board[i][j].pos);
+                } else if (game->board[i][j].state.numtouching == 5) {
+                    SDL_RenderCopy(game->render, game->textures.five, NULL, &game->board[i][j].pos);
+                } else if (game->board[i][j].state.numtouching == 6) {
+                    SDL_RenderCopy(game->render, game->textures.six, NULL, &game->board[i][j].pos);
+                } else if (game->board[i][j].state.numtouching == 7) {
+                    SDL_RenderCopy(game->render, game->textures.seven, NULL, &game->board[i][j].pos);
+                } else if (game->board[i][j].state.numtouching == 8) {
+                    SDL_RenderCopy(game->render, game->textures.eight, NULL, &game->board[i][j].pos);
+                }
+            /* Display the mine hit */
+            } else {
+                SDL_RenderCopy(game->render, game->textures.hitmine, NULL, &game->board[i][j].pos);
             }
         }
     }
