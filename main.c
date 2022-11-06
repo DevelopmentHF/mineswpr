@@ -14,7 +14,7 @@
 #define GRID_WIDTH (21)     // number of cells x-dir
 #define WINDOW_HEIGHT (CELLSIZE*GRID_HEIGHT + 1)   // size of window y-dir
 #define WINDOW_WIDTH (CELLSIZE*GRID_WIDTH + 1)    // size of window x-dir
-#define NUM_MINES (35)      // number of mines on the board
+#define NUM_MINES (75)      // number of mines on the board
 
 /*============================================================================*/
 typedef struct {
@@ -68,6 +68,7 @@ void init_cell_details(game_t* game);
 void generate_touching_details(game_t* game);
 void init_tx(game_t* game);
 void draw_cells(game_t* game, mouse_t* mouse);
+void clear_zeros(game_t* game);
 /*================================================*/
 
 int
@@ -155,6 +156,7 @@ main(int argc, char** argv) {
                 break;
             }
         }
+        clear_zeros(&game);
         /* Draw all cells */
         draw_cells(&game, &mouse);
 
@@ -360,6 +362,134 @@ draw_cells(game_t* game, mouse_t* mouse) {
             /* Display the mine hit */
             } else {
                 SDL_RenderCopy(game->render, game->textures.hitmine, NULL, &game->board[i][j].pos);
+            }
+        }
+    }
+}
+
+void
+clear_zeros(game_t* game) {
+    // if a zero is touching a clicked cell 0-8, click it.
+    // and if a 1-8cell is touching a clicked 0, click it.
+/* Needs to check all 8 positions around each mine */
+    /* Loop through all cells */
+    for (int y=0; y<GRID_HEIGHT; y++) {
+        for (int x=0;x<GRID_WIDTH; x++) {
+            if (game->board[x][y].state.numtouching == 0 && !game->board[x][y].state.ismine) {
+                /* Check all cells around this one */
+                /* Check cell above */
+                if (y>0) {
+                    if (game->board[x][y-1].state.clicked == SDL_TRUE) {
+                        game->board[x][y].state.clicked = SDL_TRUE;
+                    }
+                }
+                /* Check cell below */
+                if (y<GRID_HEIGHT-1) {
+                    if (game->board[x][y+1].state.clicked == SDL_TRUE) {
+                        game->board[x][y].state.clicked = SDL_TRUE;
+                    }
+                }
+
+                /* Check cell to the left */
+                if (x>0) {
+                    if (game->board[x-1][y].state.clicked == SDL_TRUE) {
+                        game->board[x][y].state.clicked = SDL_TRUE;
+                    }
+                }
+
+                /* Check cell to the right */
+                if (x<GRID_WIDTH-1) {
+                    if (game->board[x+1][y].state.clicked == SDL_TRUE) {
+                        game->board[x][y].state.clicked = SDL_TRUE;
+                    }
+                }
+
+                /* Check left upper diagonal cell */
+                if (x>0 && y>0) {
+                    if (game->board[x-1][y-1].state.clicked == SDL_TRUE) {
+                        game->board[x][y].state.clicked = SDL_TRUE;
+                    }
+                }
+
+                /* Check right upper diagonal cell */
+                if (x<GRID_WIDTH-1 && y>0) {
+                    if (game->board[x+1][y-1].state.clicked == SDL_TRUE) {
+                        game->board[x][y].state.clicked = SDL_TRUE;
+                    }
+                }
+
+                /* Check left bottom diagonal cell */
+                if (x>0 && y<GRID_HEIGHT-1) {
+                    if (game->board[x-1][y+1].state.clicked == SDL_TRUE) {
+                        game->board[x][y].state.clicked = SDL_TRUE;
+                    }
+                }
+
+                /* Check right bottom diagonal cell */
+                if (x<GRID_WIDTH-1 && y<GRID_HEIGHT-1) {
+                    if (game->board[x+1][y+1].state.clicked == SDL_TRUE) {
+                        game->board[x][y].state.clicked = SDL_TRUE;
+                    }
+                }
+            } else if (!game->board[x][y].state.ismine) {
+
+                /* MAKE SURE TO NOT CLICK MINES !!*/
+                 // and if a 1-8cell is touching a clicked 0, click it.
+                 /* Check all cells around this one */
+                /* Check cell above */
+                if (y>0) {
+                    if ((game->board[x][y-1].state.clicked == SDL_TRUE) && (game->board[x][y-1].state.numtouching == 0) && !game->board[x][y-1].state.ismine) {
+                        game->board[x][y].state.clicked = SDL_TRUE;
+                    }
+                }
+                /* Check cell below */
+                if (y<GRID_HEIGHT-1) {
+                    if ((game->board[x][y+1].state.clicked == SDL_TRUE) && (game->board[x][y+1].state.numtouching == 0)&& !game->board[x][y+1].state.ismine) {
+                        game->board[x][y].state.clicked = SDL_TRUE;
+                    }
+                }
+
+                /* Check cell to the left */
+                if (x>0) {
+                    if ((game->board[x-1][y].state.clicked == SDL_TRUE) && (game->board[x-1][y].state.numtouching == 0)&& !game->board[x-1][y].state.ismine) {
+                        game->board[x][y].state.clicked = SDL_TRUE;
+                    }
+                }
+
+                /* Check cell to the right */
+                if (x<GRID_WIDTH-1) {
+                    if ((game->board[x+1][y].state.clicked == SDL_TRUE) && (game->board[x+1][y].state.numtouching == 0)&& !game->board[x+1][y].state.ismine) {
+                        game->board[x][y].state.clicked = SDL_TRUE;
+                    }
+                }
+
+                /* Check left upper diagonal cell */
+                if (x>0 && y>0) {
+                    if ((game->board[x-1][y-1].state.clicked == SDL_TRUE) && (game->board[x-1][y-1].state.numtouching == 0)&& !game->board[x-1][y-1].state.ismine) {
+                        game->board[x][y].state.clicked = SDL_TRUE;
+                    }
+                }
+
+                /* Check right upper diagonal cell */
+                if (x<GRID_WIDTH-1 && y>0) {
+                    if ((game->board[x+1][y-1].state.clicked == SDL_TRUE) && (game->board[x+1][y-1].state.numtouching == 0)&& (!game->board[x+1][y-1].state.ismine)) {
+                        game->board[x][y].state.clicked = SDL_TRUE;
+                    }
+                }
+
+                /* Check left bottom diagonal cell */
+                if (x>0 && y<GRID_HEIGHT-1) {
+                    if ((game->board[x-1][y+1].state.clicked == SDL_TRUE) && game->board[x-1][y+1].state.numtouching == 0 && !game->board[x-1][y+1].state.ismine) {
+                        game->board[x][y].state.clicked = SDL_TRUE;
+                    }
+                }
+
+                /* Check right bottom diagonal cell */
+                if (x<GRID_WIDTH-1 && y<GRID_HEIGHT-1) {
+                    if ((game->board[x+1][y+1].state.clicked == SDL_TRUE) && (game->board[x+1][y+1].state.numtouching == 0)&& !game->board[x+1][y+1].state.ismine) {
+                        game->board[x][y].state.clicked = SDL_TRUE;
+                    }
+                }
             }
         }
     }
